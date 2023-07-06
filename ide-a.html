@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+
+.indent
+{
+	margin-left: 15px;
+}
+
+.while 
+{ 
+    background-color: #DDDDFF;
+}
+.for 
+{ 
+    background-color: #DDDDFF;
+}
+.if 
+{ 
+    background-color: #FFFFDD;
+}
+.then 
+{ 
+    background-color: #DDFFDD;
+}
+.else
+{ 
+    background-color: #FFDDDD;
+}
+.statement
+{ 
+    background-color: #DDDDDD;
+}
+
+.statement
+{ 
+    background-color: #DDDDDD;
+}
+
+.selected
+{ 
+    border-width: 2px ;
+    border-color: red ;
+    border-style: solid;
+}
+
+
+ </style>
+<script type="text/javascript">
+
+function createElement(type)
+{
+	const newdiv = document.createElement("div");
+	const newtext = document.createTextNode(type);
+	newdiv.appendChild(newtext);
+	newdiv.classList.add(getClass(type));
+	newdiv.classList.add("indent");
+	newdiv.addEventListener("click", clickEvent);
+	return newdiv;
+}
+
+function clickEvent(e)
+{
+	selected.classList.remove('selected');
+	selected = e.target;
+	selected.classList.add('selected');
+	e.stopPropagation();
+}
+
+function getClass(type)
+{
+	if(type == "assign")
+		return "statement";
+	return type;
+}
+
+function add(type)
+{
+ 	selected.appendChild(createElement(type));
+}
+
+var root;
+var selected;
+
+</script>
+</head>
+<body>
+
+<input type="button" onclick="add('while')"  value="while" ></input>
+<input type="button" onclick="add('for')" value="for" ></input>
+<input type="button" onclick="add('if')" value="if" ></input>
+<input type="button" onclick="add('assign')" value="assign" ></input><br>
+<div id="root" >
+</div>
+<script type="text/javascript">
+	root = document.getElementById("root");
+	selected = root;
+</script>
+</body>
+</html>

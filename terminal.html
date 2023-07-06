@@ -1,0 +1,48 @@
+<html>
+<HEAD>
+	<style type="text/css">
+		* {
+ 			 background-color: black;
+ 			 color: lightgrey;
+ 			 font: Inconsolata, monospace;
+ 			 border: none;
+		}
+		input[type=text] {  width : 100%; border: none; font: Inconsolata, monospace; }
+		input[type=text]:focus  { border: none; outline: none; 	}
+		input[type=text]:focus-visible  {  border: none; outline: none;	}
+		input[type=text]:active  {  border: none; outline: none; }		
+	</style>
+	<script type="text/javascript">
+function proc(input)
+{
+	return input;
+}
+
+function press()
+{
+	var inp = document.getElementById("in");
+	inp.focus();
+	var x = event.which || event.keyCode; 
+	if(x == 13)
+	{
+		var line = inp.value;
+		var out = document.getElementById("out");
+		out.innerHTML+="\n"+line+"\n"+proc(line);
+		inp.value = "";
+		window.scrollTo(0,document.body.scrollHeight);
+	}
+}
+
+function blur()
+{
+	alert("testtes");
+	document.getElementById("in").focus();
+}
+
+	</script>
+</HEAD>
+<body onkeydown="press();">
+<pre><output id="out"></output></pre><input id="in" type="text" onkeydown="press();" onblur="blur();" autofocus />
+
+</body>
+</html>

@@ -1,0 +1,86 @@
+<html>
+<head>
+	<script type="text/javascript">
+	    var recorder = [];
+	    var audios = [];
+		function play(index)
+		{
+			audios[index].play();
+		}
+
+		async function startrecord(index)
+		{
+			var status = document.getElementById("status");
+			status.style.backgroundColor = "green";
+			status.innerHTML = index;
+
+		  recorder[index] = await recordAudio();
+		  recorder[index].start();
+
+		}
+
+		async function endrecord(index)
+		{
+			if(recorder[index] !== undefined)
+			{
+			var status = document.getElementById("status");
+			status.style.backgroundColor = "white";
+			status.innerHTML = "";
+		   audios[index] = await recorder[index].stop();
+			}
+		}
+
+		//var buffer = await (new Response(audios[0].audioBlob)).arrayBuffer()
+		//audios[1] = new Audio(URL.createObjectURL(new Blob([buffer])))
+		//
+
+		const recordAudio = () => {
+  return new Promise(resolve => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        const mediaRecorder = new MediaRecorder(stream);
+        const audioChunks = [];
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+          audioChunks.push(event.data);
+        });
+
+        const start = () => {
+          mediaRecorder.start();
+        };
+
+        const stop = () => {
+          return new Promise(resolve => {
+            mediaRecorder.addEventListener("stop", () => {
+              const audioBlob = new Blob(audioChunks);
+              const audioUrl = URL.createObjectURL(audioBlob);
+              const audio = new Audio(audioUrl);
+              const play = () => {
+                audio.play();
+              };
+              resolve({ audioBlob, audioUrl, play });
+            });
+
+            mediaRecorder.stop();
+          });
+        };
+
+        resolve({ start, stop });
+      });
+  });
+};
+
+	</script>
+</head>
+<body>
+<button onmousedown="startrecord(0);" onmouseup="endrecord(0)" >record 0</button>
+<button onclick="play(0)">play 0</button><br>
+<button onmousedown="startrecord(1)" onmouseup="endrecord(1)">record 1</button>
+<button onclick="play(1)">play 1</button><br>
+<button onmousedown="startrecord(2)" onmouseup="endrecord(2)">record 2</button>
+<button onclick="play(2)">play 2</button><br>
+<button onmousedown="startrecord(3)" onmouseup="endrecord(3)">record 3</button>
+<button onclick="play(3)">play 3</button><br>
+<div id="status" >thing</div>
+</body>
+</html>

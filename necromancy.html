@@ -1,0 +1,257 @@
+<html>
+<head>
+<script>
+var oldTimestamp;
+
+var gridDimensionX = 9;
+var gridDimensionY = 20;
+
+var gridPixel = 20; 
+
+var objs = [];
+var objsGrid = Array(gridDimensionX).fill().map(
+	() => Array(gridDimensionY).fill().map(()=> []));
+
+var fight = 0;
+
+var parts = [[],[],[]];
+
+/*
+3 free simple arms and lower
+
+parts:
+arms: 
+	offence: fist, sword, claw, ranged?
+		knockback, bleed, cleave
+	defence: shield, counter
+upper: 
+	special: heal, explode, crit, stun, leech
+	defence: armor, hp, reg 
+	offence: firebreath, aoe degen  
+lower: 
+	movement: speed, leap, fly(stacks)
+	special: slow, anything that should not be possible with movement
+
+meta prog:
+part frequency
+part effect
+enemy amount
+
+parts freischalten: bosse?, einfach mit upgrades?
+
+part combining?
+*/
+
+function paint(ctx, timestamp){
+	ctx.fillStyle = "#EEEEEE";
+	ctx.fillRect(0, 0, gridPixel* gridDimensionX, gridPixel* gridDimensionY);
+	ctx.fillStyle = "#BBBBBB";
+	for(var i = 0; i < gridDimensionX; i++)
+	for(var j = 0; j < gridDimensionY; j++)
+		if((i+j)%2==0)
+			ctx.fillRect(i*gridPixel, j*gridPixel, gridPixel, gridPixel);
+
+	if(oldTimestamp != undefined)
+	{
+		var dur = timestamp-oldTimestamp;
+		for(let obj of objs)
+			obj.update(dur);
+		for(let obj of objs)
+			obj.draw(ctx);
+	}
+	oldTimestamp = timestamp;
+}
+
+
+function onClick(x, y, alt)
+{
+	var gx = Math.floor(x / gridPixel);
+	var gy = Math.floor(y / gridPixel);
+	addObj(createObj(gx, gy, alt));
+}
+
+function createObj(gx, gy, alt)
+{
+	var obj = {
+	x : gx,
+	y : gy,
+	alt : alt,
+	movT:0,
+	atkT:0,
+	hp: 100,
+	dmg:  10,
+	draw : ctx => drawObj(ctx, obj),
+	update : dur => update(dur, obj),
+	};
+	return obj;
+}
+
+function update(dur, obj)
+{
+	move(dur, obj);
+	attack(dur, obj);
+}
+
+function drawObj(ctx, obj)
+{
+	var centerX = obj.x*gridPixel + gridPixel/2;
+	var centerY = (gridDimensionY-obj.y-0.5)*gridPixel;
+	var w = obj.hp/100 * gridPixel;
+	var h = obj.hp/100 * gridPixel;
+
+	ctx.fillStyle = obj.alt ? "#DD7777" : "#7777DD";
+	ctx.fillRect(centerX-(gridPixel/2), centerY-(gridPixel/2), gridPixel, gridPixel);
+
+	ctx.fillStyle = obj.alt ? "#DD0000" : "#0000DD";
+	ctx.fillRect(centerX-(w/2), centerY-(h/2), w, h);
+}
+
+
+function attack(dur, obj)
+{
+	var dir = obj.alt == 1 ? 1: -1;
+	var newpos = pos(obj.x, obj.y+dir);
+	if(newpos.y > 0 && newpos.y < gridDimensionY)
+	{
+		var targets = objsAt(newpos);
+		if(targets.length > 0)
+		{
+			obj.atkT += dur;
+			if(obj.atkT > 1000)
+			{
+				obj.atkT -= 1000;
+				getHit(targets[0], obj);
+			}
+		}
+	}
+}
+
+function getHit(obj, source)
+{
+	obj.hp -= (1+Math.random())*source.dmg;
+	if(obj.hp <= 0)
+	{
+		take(obj);
+		objs.splice(objs.indexOf(obj), 1);
+	}
+}
+
+function move(dur, obj)
+{
+	var dir = obj.alt == 1 ? 1: -1;
+	var newpos = pos(obj.x, obj.y+dir);
+	if(newpos.y >= 0 && newpos.y < gridDimensionY && !objsAt(newpos).length > 0)
+	{
+		obj.movT += dur;
+		if(obj.movT > 1000)
+		{
+			obj.movT -= 1000;
+			take(obj);
+			obj.y = newpos.y;
+			place(obj);
+		}
+	}
+}
+
+//util
+
+function comparePos(a, b)
+{
+	return minDistance(a) - minDistance(b);
+}
+
+function minDistance(s)
+{
+	return Math.min.apply(null, objs.filter(o => o != s).map(o => distance(o,s)));
+}
+
+
+function steps(p)
+{
+	var arr =
+	[
+		pos(p.x+1,p.y),
+		pos(p.x-1,p.y),
+		pos(p.x,p.y+1),
+		pos(p.x,p.y-1)
+	];
+	return arr.filter(s => s.x>=0 && s.y>=0 && s.x < gridDimensionX && s.y < gridDimensionY);
+}
+
+function objsAt(pos)
+{
+	return objsGrid[pos.x][pos.y];
+}
+
+function distance(a, b)
+{
+	var x = a.posx-b.posx;
+	var y = a.posy-b.posy;
+	return Math.sqrt((x*x)+(y*y));
+}
+
+function path(x, y, first)
+{
+	return {x:x,y:y, first:first};
+}
+function pos(x, y)
+{
+	return {x:x,y:y};
+}
+
+function addObj(obj)
+{
+	objs.push(obj);
+	place(obj);
+}
+
+function place(obj)
+{
+	objsGrid[obj.x][obj.y].push(obj);
+}
+
+function take(obj)
+{
+	var list = objsGrid[obj.x][obj.y];
+	list.splice(list.indexOf(obj), 1);
+}
+
+///////////// framwork
+
+
+document.addEventListener("keydown", event => {});
+document.addEventListener("keyup", event => {});
+
+function handleClick (canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    onClick(x, (gridPixel*gridDimensionY)-y, event.button == 0);
+    event.handled = true;
+}
+
+
+
+function start(){
+	const canvas = document.getElementById('c');
+	const div = document.getElementById('div');
+
+	canvas.addEventListener('mousedown', function(e) {
+    	handleClick(canvas, e)
+	})
+	var ctx = canvas.getContext("2d");
+
+	const render = (timestamp) => {
+	  paint(ctx, timestamp);
+	  window.requestAnimationFrame(render);
+	};
+	window.requestAnimationFrame(render);
+}
+	window.onload = start;
+</script>
+</head>
+<body background="black">
+	<canvas id = 'c' width="400" height="400" onload="start" oncontextmenu="return false;"></canvas>
+	<div id ='div'> </div>
+</body>
+</html>

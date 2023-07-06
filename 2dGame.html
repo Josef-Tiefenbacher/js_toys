@@ -1,0 +1,192 @@
+<html>
+<head>
+<script>
+var oldTimestamp;
+var h = 300;
+var w = 400;
+
+
+var char = createObj(150,200, 0.3, false);
+
+var objs = [];
+
+var left = 0;
+var right = 0;
+var up = 0;
+var down = 0;
+var push = 0;
+
+var pushforce = 22;
+
+
+function paint(ctx, timestamp){
+	ctx.fillStyle = "#EEEEEE";
+	ctx.fillRect(0, 0, w, h);
+	ctx.fillStyle = "#DDDD77";
+	ctx.fillRect(0, h - 100, w, 100);
+
+	if(left == 1) //left;
+	{
+		char.dx -= 1;
+	}
+	if(up == 1) //up;
+	{
+		if(char.posy <= 100)
+		{
+			char.dy = 7;
+		}
+	}
+	if(right == 1) //right;
+	{
+		char.dx += 1;	
+	}
+	if(down == 1) //down;
+	{
+		if(char.posy <= 100)
+		{
+			char.dx = (char.dx * 0.55); //break
+		}
+	}
+
+		for(var i = 0; i < objs.length; i++)
+		{
+			var obj = objs[i];
+			if(push == 1) 
+			{
+				var dist = distance(char, obj);
+				var dx = (char.posx - obj.posx) / (dist * dist * dist);
+				var dy = (char.posy - obj.posy) / (dist * dist * dist);
+				char.dx += dx*pushforce;
+				char.dy += dy*pushforce;
+				obj.dx += -dx*pushforce;
+				obj.dy += -dy*pushforce;
+			}
+			move(obj);
+		}
+
+
+	move(char);
+	if(oldTimestamp != undefined)
+	{
+		var dur = timestamp-oldTimestamp;
+	}		
+	drawAnkers(ctx);
+	ctx.fillStyle = "#FF0000";
+	ctx.fillRect(char.posx-5, h-(char.posy+8), 10, 10);
+	oldTimestamp = timestamp;
+}
+
+function drawAnkers(ctx)
+{
+	var size = push == 1 ? 6 : 4;
+	for(var i = 0; i < objs.length; i++)
+	{
+		var obj = objs[i];
+		ctx.fillStyle = "#0000FF";
+		ctx.fillRect(obj.posx-(size/2), h-(obj.posy+(size/2)), size, size);
+	}
+}
+
+function onClick(x, y, fixed)
+{
+	objs.push(createObj(x, y, 0.1, fixed));
+}
+
+function createObj(x, y, mass, fixed)
+{
+	return {
+	posx : x,
+	posy : y,
+	dx : 0,
+	dy : 0,
+	drag : 0.95,
+	mass : mass,
+	fixed : fixed
+	};
+}
+
+function move(obj)
+{
+	if(obj.fixed)
+		return;
+	obj.dy-= obj.mass; //gravity
+	obj.dx = (obj.dx * obj.drag); //drag
+	obj.dy = (obj.dy * obj.drag); //drag
+	obj.posx += obj.dx;
+	obj.posy += obj.dy;
+	if(obj.posx < 0) obj.posx = w;
+	if(obj.posy < 0) obj.posy = h;
+	if(obj.posx > w) obj.posx = 0;
+	if(obj.posy > h) obj.posy = h ;
+	if(obj.posy < 100)
+	{
+		obj.posy = 100;
+		if(obj.dy < 0)
+			obj.dy = 0;
+	}
+}
+
+function distance(a, b)
+{
+	var x  = a.posx-b.posx;
+	var y  = a.posy-b.posy;
+	return Math.sqrt((x*x)+(y*y));
+}
+
+document.addEventListener("keydown", event => {
+if(event.keyCode == 37) //left;
+	left = 1;
+if(event.keyCode == 38) //up;
+	up = 1;
+if(event.keyCode == 39) //right;
+	right = 1;
+if(event.keyCode == 40) //down;
+	down = 1 ;
+if(event.keyCode == 32) //space;
+	push = 1 ;
+});
+document.addEventListener("keyup", event => {
+if(event.keyCode == 37) //left;
+	left = 0;
+if(event.keyCode == 38) //up;
+	up = 0;
+if(event.keyCode == 39) //right;
+	right = 0;
+if(event.keyCode == 40) //down;
+	down = 0 ;
+if(event.keyCode == 32) //space;
+	push = 0 ;
+});
+
+function handleClick (canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    onClick(x, h-y, event.button == 0);
+}
+
+
+
+function start(){
+	const canvas = document.getElementById('c');
+	const div = document.getElementById('div');
+
+	canvas.addEventListener('mousedown', function(e) {
+    	handleClick(canvas, e)
+	})
+	var ctx = canvas.getContext("2d");
+
+	const render = (timestamp) => {
+	  paint(ctx, timestamp);
+	  window.requestAnimationFrame(render);
+	};
+	window.requestAnimationFrame(render);
+}
+	window.onload = start;
+</script>
+</head>
+<body background="black">
+	<canvas id = 'c' width="400" height="300" onload="start"></canvas>
+	<div id ='div'> </div>
+</body>
+</html>

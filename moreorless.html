@@ -1,0 +1,314 @@
+<html>
+<head>
+<script>
+var oldTimestamp;
+var h = 600;
+var w = 800;
+
+
+var char = createObj(150,200);
+var camera = createObj(150,200);
+var cam_k = 0.1;
+var cam_d = 0.5;
+
+
+var objs = [];
+
+var left = 0;
+var right = 0;
+var up = 0;
+var down = 0;
+var dash = 0;
+
+var spawnCD = 0;
+var dashCD = 0;
+
+var testa =  {posx : 100, posy : 100};
+var testb =  {posx : 105, posy : 105};
+space(testa, testb, 14);
+
+function paint(ctx, timestamp){
+	drawBackground(ctx);
+	var speed = 0.2;
+	var dashd = 0;
+
+	if(oldTimestamp != undefined)
+	{
+		var dur = timestamp-oldTimestamp;
+		ctx.fillStyle = "#000000";
+		ctx.font = "30px Arial";
+		var fps = Math.floor(1/(dur/1000));
+		ctx.fillText(fps+" fps", 10, 50); 
+		spawnCD += dur;
+		if(dashCD > 0)
+			dashCD-=dur;
+		if(dashCD <= 0 && dash == 1)
+		{
+			dashCD = 500;
+			dashd = 80;
+		}
+		if(spawnCD > 1000)
+		{
+			spawnCD = 0;
+			var x = Math.random() * 500 - 250;
+			var y = Math.random() * 500 - 250;
+			objs.push(createObj(x+char.posx, y+char.posy));
+		}
+		web(dur);
+		for(obj of objs)
+		{
+			move(obj);
+			var relx = (obj.posx-camera.posx);
+			var rely = (obj.posy-camera.posy);
+			drawCricleAt(ctx, w/2+relx, h/2+rely, 7, "#FFFF00");
+		}
+		if(left == 1) //left;
+			char.posx -= speed*dur + dashd;
+		if(up == 1) //up;
+			char.posy -= speed*dur + dashd;
+		if(right == 1) //right;
+			char.posx += speed*dur + dashd;
+		if(down == 1) //down;
+			char.posy += speed*dur + dashd;
+	}		
+
+	var offsetx = char.posx - camera.posx;
+	var offsety = char.posy - camera.posy;
+	drawCricleAt(ctx, offsetx+w/2, offsety+h/2, 10, "#FF0000");
+	camera.dx += cam_k*offsetx;
+	camera.dy += cam_k*offsety;
+	camera.dx *= cam_d;
+	camera.dy *= cam_d;
+	move(camera);
+	oldTimestamp = timestamp;
+}
+
+
+	var wbgscale = 4;
+	var wgap = (w/wbgscale);
+	var hbgscale = wbgscale * h/w;
+	var hgap = (h/hbgscale);
+function drawBackground(ctx)
+{
+	ctx.fillStyle = "#EEEEEE";
+	ctx.fillRect(0, 0, w, h);
+	
+	ctx.beginPath();
+	var offset = wgap - (camera.posx % wgap);
+	for(var i = -1; i < wbgscale; i++)
+	{
+		ctx.moveTo(i*wgap+offset, 0);
+		ctx.lineTo(i*wgap+offset, h);
+	}
+	var offset = hgap - (camera.posy % hgap);
+	for(var i = -1; i < hbgscale; i++)
+	{
+		ctx.moveTo(0, i*hgap+offset);
+		ctx.lineTo(w, i*hgap+offset);
+	}
+	ctx.stroke(); 
+}
+
+function drawCricleAt(ctx, x,y,r, color)
+{
+	ctx.beginPath();
+	ctx.fillStyle = color;
+    ctx.arc(x, y, r, 0, 2 * Math.PI, false);
+    ctx.fill();
+}
+
+function onClick(x, y, fixed)
+{
+	
+}
+
+function createObj(x, y)
+{
+	return {
+	posx : x,
+	posy : y,
+	dx : 0,
+	dy : 0,
+	stopped: false,
+	};
+}
+
+function web(dur )
+{
+
+	var enemySpeed = 0.1;
+	var rchar = 10;
+	var echar = 7;
+	/*
+	var squareSide = 15;
+	var sqrs = {};
+	for(var x = 0; x < (w/squareSide)+1; x++)
+	for(var y = 0; y < (h/squareSide)+1; y++)
+	{
+		sqrs[x+":"+y] =  {x:x, y:y, objs:[], containsStopped:false, dx:0, dy:0 }
+	}
+	for(obj of objs)
+	{
+		var dist = distance(char, obj);
+		obj.stopped = (dist <= rchar+echar );
+		var relx = (obj.posx-char.posx);
+		var rely = (obj.posy-char.posy);
+		if(relx < w/2 && relx > -w/2 && rely < h/2 && rely > -h/2)
+		{
+			var scrx = relx + (w/2.0);
+			var scry = rely + (h/2.0);
+			var ix = Math.floor(scrx%squareSide);
+			var iy = Math.floor(scry%squareSide);
+
+			var sqr = sqrs[ix+":"+iy];
+			sqr.objs.push(obj);
+			sqr.containsStopped |= obj.stopped;
+
+			var modifier = enemySpeed*dur/dist;
+			obj.dx = -relx*modifier;
+			obj.dy = -rely*modifier;
+		}
+		else
+		{
+			var modifier = enemySpeed*dur/dist;
+			obj.dx = -relx*modifier;
+			obj.dy = -rely*modifier;
+		}
+	}
+	for(var x = 0; x < (w/squareSide)+1; x++)
+	for(var y = 0; y < (h/squareSide)+1; y++)
+	{
+		var ll = [];
+		addneigh(sqrs,x,y,ll);
+		addneigh(sqrs,x  ,y+1,ll);
+		addneigh(sqrs,x  ,y-1,ll);
+		addneigh(sqrs,x+1,y  ,ll);
+		addneigh(sqrs,x+1,y+1,ll);
+		addneigh(sqrs,x+1,y-1,ll);
+		addneigh(sqrs,x-1,y  ,ll);
+		addneigh(sqrs,x-1,y+1,ll);
+		addneigh(sqrs,x-1,y-1,ll);
+		for(l1 of ll)
+		for(o1 of l1)
+		for(l2 of ll)
+		for(o2 of l2)
+		{
+			space(o1,o2, 20);	
+		}
+	}*/
+	for(obj of objs)
+	{
+		var relx = (obj.posx-char.posx);
+		var rely = (obj.posy-char.posy);
+		var dist = distance(char, obj);
+		var modifier = enemySpeed*dur/dist;
+		obj.dx = -relx*modifier;
+		obj.dy = -rely*modifier;
+	}
+
+	var mindist = echar*2;
+	for(o1 of objs)
+		for(o2 of objs)
+			space(o1,o2,mindist);	
+}
+
+function space(o1, o2, mind)
+{
+	var d = distance(o1,o2);
+	if(d < mind && d > 0)
+	{
+		var dx = o1.posx-o2.posx;
+		var dy = o1.posy-o2.posy;
+		o1.posx += dx * (mind-d) /(2*d);
+		o1.posy += dy * (mind-d) /(2*d);
+		o2.posx -= dx * (mind-d) /(2*d);
+		o2.posy -= dy * (mind-d) /(2*d);
+	}
+}
+
+
+function addneigh(sqrs, x, y, ll)
+{
+	if(sqrs[x+":"+y] != undefined)
+	{
+		ll.push(sqrs[x+":"+y].objs)
+	}
+}
+
+function move(obj)
+{
+	if(!obj.stopped)
+	{
+		var posx = obj.posx + obj.dx;
+		var posy = obj.posy + obj.dy;
+
+		obj.posx = posx;
+		obj.posy = posy;
+	}
+	
+}
+
+function distance(a, b)
+{
+	var x  = a.posx-b.posx;
+	var y  = a.posy-b.posy;
+	return Math.sqrt((x*x)+(y*y));
+}
+
+document.addEventListener("keydown", event => {
+if(event.keyCode == 37 || event.keyCode == 65) //left;
+	left = 1;
+if(event.keyCode == 38 || event.keyCode == 87) //up;
+	up = 1;
+if(event.keyCode == 39 || event.keyCode == 68) //right;
+	right = 1;
+if(event.keyCode == 40 || event.keyCode == 83) //down;
+	down = 1 ;
+if(event.keyCode == 32) //space;
+	dash = 1 ;
+});
+document.addEventListener("keyup", event => {
+if(event.keyCode == 37 || event.keyCode == 65) //left;
+	left = 0;
+if(event.keyCode == 38 || event.keyCode == 87) //up;
+	up = 0;
+if(event.keyCode == 39 || event.keyCode == 68) //right;
+	right = 0;
+if(event.keyCode == 40 || event.keyCode == 83) //down;
+	down = 0 ;
+if(event.keyCode == 32) //space;
+	dash = 0 ;
+});
+
+function handleClick (canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    onClick(x, h-y, event.button == 0);
+}
+
+
+
+function start(){
+	const canvas = document.getElementById('c');
+	const div = document.getElementById('div');
+
+	canvas.addEventListener('mousedown', function(e) {
+    	handleClick(canvas, e)
+	})
+	var ctx = canvas.getContext("2d");
+
+	const render = (timestamp) => {
+	  paint(ctx, timestamp);
+	  window.requestAnimationFrame(render);
+	};
+	window.requestAnimationFrame(render);
+}
+	window.onload = start;
+</script>
+</head>
+<body background="black">
+	<canvas id = 'c' width="800" height="600" onload="start"></canvas>
+	<div id ='div'> </div>
+</body>
+</html>

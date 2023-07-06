@@ -1,0 +1,195 @@
+<html>
+<head>
+	<script type="text/javascript">
+
+function drawCenteredHexagon(ctx, x, y, r)
+{
+	ctx.lineWidth = 1;
+	ctx.moveTo(x+r, y);
+	for(var i = 0; i < 7; i++)
+	{
+		ctx.lineTo(x+Math.cos(Math.PI/3 * i)*r, y + Math.sin(Math.PI/3 * i)*r);
+	}
+	ctx.stroke(); 
+}
+
+function IsInHexagon(p, x, y, r)
+{
+	for(var i = 0; i < 7; i++)
+	{
+		var a = point(250,250);
+		var b = point(x+Math.cos(Math.PI/3 * i)*r, y + Math.sin(Math.PI/3 * i)*r);
+		var c = point(x+Math.cos(Math.PI/3 * (i+1))*r, y + Math.sin(Math.PI/3 * (i+1))*r);
+
+		if(isPointInTiangle(p, triangle(a, b, c)))
+			{ return true;}
+	}
+	return false; 
+}
+
+function isPointInTiangle(p, triangle)
+{
+    var as_x = p.x-triangle.a.x;
+    var as_y = p.y-triangle.a.y;
+    var s_ab = (triangle.b.x-triangle.a.x)*as_y-(triangle.b.y-triangle.a.y)*as_x > 0;
+    if((triangle.c.x-triangle.a.x)*as_y-(triangle.c.y-triangle.a.y)*as_x > 0 == s_ab) return false;
+    if((triangle.c.x-triangle.b.x)*(p.y-triangle.b.y)-(triangle.c.y-triangle.b.y)*(p.x-triangle.b.x) > 0 != s_ab) return false;
+    return true;
+}
+
+function normalizeAngle(a)
+{
+	while(a < 0)
+		a += 2 * Math.PI;	
+	while(a > Math.PI * 2)
+		a -= 2 * Math.PI;	
+	return a;
+}
+
+function line(a, b)
+{
+	return {a:a, b:b};
+}
+function triangle(a, b, c)
+{
+	return {a:a, b:b, c:c};
+}
+function point(x, y)
+{
+	return {x:x, y:y};
+}
+
+function GetAngleOfLine(l)
+{
+	var p = point(l.b.x-l.a.x, l.b.y-l.a.y);
+	return atan2(p.x, p.y);
+}
+
+function pointEqual(p1, p2)
+{
+	return Math.abs(p1.x - p2.x) < 3 && Math.abs(p1.y - p2.y) < 3
+}
+
+function isIn(p, list)
+{
+	for(var i in list)
+	{
+		if(pointEqual(list[i], p))
+			return true;
+	}
+	return false;
+}
+
+function clearfunc()
+{
+	var c = document.getElementById("canvas");
+	var ctx = c.getContext("2d");
+	ctx.clearRect(0, 0, c.width, c.height);
+}
+
+function draw()
+{
+	var c = document.getElementById("canvas");
+	var chanceToBend = document.getElementById("chanceToBend").value / 100;
+	var chanceToSprout = document.getElementById("chanceToSprout").value / 100;
+	if(!(chanceToBend > 0 || chanceToSprout > 0))
+		return;
+	var ctx = c.getContext("2d");
+	ctx.clearRect(0, 0, c.width, c.height);
+	drawCenteredHexagon(ctx, 250, 250, 250);
+	var r = 25;
+	ctx.moveTo(250, 250);
+	var points = [];
+	var pointsToStartFrom = [];
+	var activePoints = [];
+	activePoints.push({x:250, y:250, phi:0, distance: 0});
+	activePoints.push({x:250, y:250, phi:Math.PI, distance: 0});
+	points.push({x:250, y:250, phi:0, distance: 0});
+	pointsToStartFrom.push({x:250, y:250, prevphi:0, phi:0, distance: 0});
+	while(activePoints.length > 0 || pointsToStartFrom.length > 0)
+	{
+		if(Math.random() < chanceToSprout && pointsToStartFrom.length > 0)
+		{
+			var index = Math.floor(Math.random() * pointsToStartFrom.length);
+			var p = pointsToStartFrom[index];
+			p = {x:p.x, y:p.y, phi:p.phi, prevphi:p.prevphi, distance: p.distance+1};
+			if(p.phi == p.prevphi)
+			{
+				p.phi += (Math.random() > 0.5) ? Math.PI/3 : -Math.PI/3;
+			}
+			else
+			{
+				p.phi -= 2*(p.phi - p.prevphi);
+			}
+			activePoints.push(p);
+			pointsToStartFrom.splice(index, 1);
+		}
+		for(i in activePoints)
+		{
+			var p = activePoints[i];
+			ctx.beginPath();
+			ctx.moveTo(p.x, p.y);
+			var prevx = p.x;
+			var prevy = p.y;
+			var prevphi = p.phi;
+			p.x += Math.cos(p.phi)*r;
+			p.y += Math.sin(p.phi)*r;
+			p.distance++;
+			if(Math.random() < chanceToBend)
+				p.phi += (Math.random() > 0.5) ? Math.PI/3 : -Math.PI/3;
+			if(!IsInHexagon(p, 250, 250, 240) || isIn(p, points))
+			{
+				activePoints.splice(i, 1);
+				continue;
+			}
+			points.push({x:p.x, y:p.y, phi:p.phi, prevx:prevx, prevy: prevy, prevphi:prevphi, distance: p.distance});
+			pointsToStartFrom.push({x:p.x, y:p.y, phi:p.phi, prevx:prevx, prevy: prevy, prevphi:prevphi, distance: p.distance});
+			var lwidth = 5 - (p.distance / 6);
+			if(lwidth < 1)
+				lwidth = 1;
+			ctx.lineWidth = lwidth;
+			ctx.lineTo(p.x, p.y);
+			ctx.stroke(); 
+			ctx.closePath();
+		}
+	}
+	ctx.lineWidth = 0;
+	for(i in points)
+	{
+		ctx.beginPath();
+		var p = points[i];
+		var lwidth = 5 - (p.distance / 6);
+		if(lwidth < 1)
+			lwidth = 1;
+		ctx.lineWidth = 0;
+		ctx.arc(p.x,p.y, lwidth/2,0,2*Math.PI);
+		ctx.fill(); 
+		ctx.closePath();
+	}
+}
+
+	</script>
+	<style type="text/css">
+		canvas {
+		    padding: 0;
+		    margin: auto;
+		    display: block;
+		    width: 500px;
+		    height: 500px;
+		    position: absolute;
+		    top: 0;
+		    bottom: 0;
+		    left: 0;
+		    right: 0;
+		}
+	</style>
+</head>
+<body>
+	<button onclick="draw();">draw</button>
+	<button onclick="clearfunc();">clear</button>
+	<br>chance to bend <input type="text" id="chanceToBend" width = "100px" value="40" >
+	<br>chance to sprout <input type="text" id="chanceToSprout" width = "100px" value="10">
+
+	<canvas id="canvas" width="500px" height="500px" ></canvas>
+</body>
+</html>

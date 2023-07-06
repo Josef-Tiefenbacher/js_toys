@@ -1,0 +1,324 @@
+<html>
+<HEAD>
+<meta charset="utf-8"/>
+<script id="vertex-shader" type="x-shader/x-vertex">
+  attribute vec2 aVertexPosition;
+  varying vec2 v_texcoord;
+  uniform vec2 uScalingFactor;
+  uniform vec2 uTextOffset;
+
+
+  void main() {
+    v_texcoord = (aVertexPosition * uScalingFactor * 0.5) + uTextOffset;
+    gl_Position = vec4(aVertexPosition * uScalingFactor, 0.0, 1.0);
+  }
+</script>
+
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+  #ifdef GL_ES
+    precision highp float;
+    precision highp int;
+  #endif
+
+  varying vec2 v_texcoord;
+  uniform vec4 uSand;
+  uniform vec4 uAir;
+  uniform vec4 uGlobalColor;
+  uniform sampler2D u_texture;
+  uniform vec2 uUtilVecX;
+  uniform vec2 uUtilVecY;  
+
+  void main() {
+    int baseInt = 200;
+    float baseFloat = 200.0;
+    int neighbours = 1;
+    vec4 centerColor = texture2D(u_texture, v_texcoord);
+    if(centerColor.a < 0.5)
+    {
+       gl_FragColor = centerColor;
+    }
+    else
+    {
+      vec4 color = centerColor;
+      vec4 up = texture2D(u_texture, v_texcoord + uUtilVecY);
+      vec4 down = texture2D(u_texture, v_texcoord - uUtilVecY);
+
+      if(color == uAir && up == uSand)
+      {
+        gl_FragColor = up;
+      }
+      else if(color == uSand && down == uAir)
+      {
+        gl_FragColor = down;
+      }
+      else
+      {
+        gl_FragColor = color;
+      }
+    };
+  }
+</script>
+
+
+
+<script type="text/javascript">
+
+window.onkeydown = function(e) { 
+  window.requestAnimationFrame(function(currentTime) {
+    previousTime = currentTime;
+    animateScene();
+  });
+}
+
+function animateScene() {
+  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+  gl.clearColor(0.8, 0.9, 1.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.useProgram(shaderProgram);
+
+  uScalingFactor = gl.getUniformLocation(shaderProgram, "uScalingFactor");
+  uGlobalColor = gl.getUniformLocation(shaderProgram, "uGlobalColor");
+  uSand = gl.getUniformLocation(shaderProgram, "uSand");
+  uAir = gl.getUniformLocation(shaderProgram, "uAir");
+  uTextOffset = gl.getUniformLocation(shaderProgram, "uTextOffset");
+  uUtilVecX = gl.getUniformLocation(shaderProgram, "uUtilVecX");
+  uUtilVecY = gl.getUniformLocation(shaderProgram, "uUtilVecY");
+
+  glCanvas = document.getElementById("glcanvas");
+  gl.uniform2fv(uScalingFactor, currentScale);
+  gl.uniform4fv(uGlobalColor, [0.1, 0.7, 0.2, 1.0]);
+  gl.uniform4fv(uSand, [1.0, 1.0, 1.0, 1.0]);
+  gl.uniform4fv(uAir, [0.0, 0.0, 0.0, 1.0]);
+  gl.uniform2fv(uTextOffset, [0.5, 0.5]);
+  glCanvas = document.getElementById("glcanvas");
+  gl.uniform2fv(uUtilVecX, [1.00/glCanvas.width, 0.0 ]);
+  gl.uniform2fv(uUtilVecY, [0.0 , 1.00/glCanvas.height]);
+
+
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+  aVertexPosition = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+
+  gl.enableVertexAttribArray(aVertexPosition);
+  gl.vertexAttribPointer(aVertexPosition, vertexNumComponents, gl.FLOAT, false, 0, 0);
+
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture2, 0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, null, 0);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+
+  
+  var help;
+  help = texture;
+  texture = texture2;
+  texture2 = help;
+  
+
+  window.requestAnimationFrame(function(currentTime) {
+    previousTime = currentTime;
+    animateScene();
+  });
+  
+}
+
+
+let gl = null;
+let glCanvas = null;
+// Aspect ratio and coordinate system
+// details
+let aspectRatio;
+let currentScale = [1.0, 1.0];
+let animationScale = [1.0, 1.0];
+// Vertex information
+let vertexArray;
+let vertexBuffer;
+let vertexNumComponents;
+let vertexCount;
+// Rendering data shared with the
+// scalers.
+let uScalingFactor;
+let uGlobalColor;
+let aVertexPosition;
+// Animation timing
+let previousTime = 0.0;
+let degreesPerSecond = 90.0;
+
+var texture;
+var texture2;
+var textureArr;
+var textureArr2;
+var fb;
+
+window.addEventListener("load", startup, false);
+
+
+
+
+function startup() {
+  glCanvas = document.getElementById("glcanvas");
+  gl = glCanvas.getContext("webgl");
+  console.log("max num of attribts: "+gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+  const shaderSet = [
+    {
+      type: gl.VERTEX_SHADER,
+      id: "vertex-shader"
+    },
+    {
+      type: gl.FRAGMENT_SHADER,
+      id: "fragment-shader"
+    }
+  ];
+  shaderProgram = buildShaderProgram(shaderSet);
+  aspectRatio = glCanvas.width/glCanvas.height;
+  currentScale = [1.0, aspectRatio];
+  vertexArray = new Float32Array([
+      -1.0, 1.0, 1.0, 1.0, 1.0, -1.0,
+      -1.0, 1.0, 1.0, -1.0, -1.0, -1.0
+  ]);
+  vertexBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertexArray, gl.STATIC_DRAW);
+  vertexNumComponents = 2;
+  vertexCount = vertexArray.length/vertexNumComponents;
+
+
+    var texWidth = glCanvas.width; 
+    var texHeight = glCanvas.height;
+    // Create a texture.
+    var cx = texWidth/2;
+    var cy = texHeight/2;
+
+    var points = []
+    for(var i =0; i < 50; i++)
+    {
+      points.push({x: cx+getRandomInt(texWidth)-cx, y: cy+getRandomInt(texHeight)-cy, r: getRandomInt(25)});
+    }
+    var arr = [];
+    for(var x = 0.0; x < texWidth;  x++)
+      for(var y = 0.0; y < texHeight; y++)
+      {
+        var hit = false;
+        points.forEach(function(entry) {
+              if(!hit && dist(entry.x, entry.y, x, y) < entry.r)
+              {
+                    hit = true;
+                    arr.push(255);
+                    arr.push(255);
+                    arr.push(255);
+                    arr.push(255);
+              }
+            });
+        if(!hit)
+        {
+          arr.push(0);
+          arr.push(0);
+          arr.push(0);
+          arr.push(255);
+        }
+      }
+    textureArr = new Uint8Array(arr);
+    texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texWidth, texHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, textureArr); 
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    textureArr2 = new Uint8Array(arr);
+    texture2 = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture2);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, texWidth, texHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, textureArr2); 
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture2, 0);
+
+   /* // Asynchronously load an image
+    var image = new Image();
+    image.src = "cloud.jpg";
+    image.addEventListener('load', function() {
+      // Now that the image has loaded make copy it to the texture.
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, image);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    });
+   */
+
+  animateScene();
+}
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * Math.floor(max));
+}
+
+function dist(x1, y1, x2, y2)
+{
+  var x = x2-x1;
+  var y = y2-y1;
+  return Math.sqrt(x*x+y*y);
+}
+
+
+function buildShaderProgram(shaderInfo) {
+  let program = gl.createProgram();
+
+  shaderInfo.forEach(function(desc) {
+    let shader = compileShader(desc.id, desc.type);
+
+    if (shader) {
+      gl.attachShader(program, shader);
+    }
+  });
+
+  gl.linkProgram(program)
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.log("Error linking shader program:");
+    console.log(gl.getProgramInfoLog(program));
+  }
+
+  return program;
+}
+
+
+
+
+
+function compileShader(id, type) {
+  let code = document.getElementById(id).firstChild.nodeValue;
+  let shader = gl.createShader(type);
+
+  gl.shaderSource(shader, code);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
+    console.log(gl.getShaderInfoLog(shader));
+  }
+  return shader;
+}
+</script>
+
+</HEAD>
+<!-- Learn about this code on MDN: https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Basic_2D_animation_example -->
+
+<canvas id="glcanvas" width="512" height="512" onclick="click">
+  Oh no! Your browser doesn't support canvas!
+</canvas>
+</html>

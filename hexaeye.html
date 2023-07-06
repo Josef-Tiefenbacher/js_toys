@@ -1,0 +1,113 @@
+<html>
+<head>
+	<script type="text/javascript">
+
+function drawCenteredHexagon(ctx, x, y, r)
+{
+	ctx.moveTo(x+r, y);
+	for(var i = 0; i < 7; i++)
+	{
+		ctx.lineTo(x+Math.cos(Math.PI/3 * i)*r, y + Math.sin(Math.PI/3 * i)*r);
+	}
+	ctx.stroke(); 
+}
+
+function IsInHexagon(p, x, y, r)
+{
+	for(var i = 0; i < 7; i++)
+	{
+		var a = point(250,250);
+		var b = point(x+Math.cos(Math.PI/3 * i)*r, y + Math.sin(Math.PI/3 * i)*r);
+		var c = point(x+Math.cos(Math.PI/3 * (i+1))*r, y + Math.sin(Math.PI/3 * (i+1))*r);
+
+		if(isPointInTiangle(p, triangle(a, b, c)))
+			{ return true;}
+	}
+	return false; 
+}
+
+function isPointInTiangle(p, triangle)
+{
+	console.log(p.x +", "+p.y + " in "+ triangle.a.x +","+triangle.a.y+"; "+ triangle.b.x +","+triangle.b.y+"; "+ triangle.c.x +","+triangle.c.y+"; ");
+    var as_x = p.x-triangle.a.x;
+    var as_y = p.y-triangle.a.y;
+    var s_ab = (triangle.b.x-triangle.a.x)*as_y-(triangle.b.y-triangle.a.y)*as_x > 0;
+    if((triangle.c.x-triangle.a.x)*as_y-(triangle.c.y-triangle.a.y)*as_x > 0 == s_ab) return false;
+    if((triangle.c.x-triangle.b.x)*(p.y-triangle.b.y)-(triangle.c.y-triangle.b.y)*(p.x-triangle.b.x) > 0 != s_ab) return false;
+    return true;
+}
+
+function normalizeAngle(a)
+{
+	while(a < 0)
+		a += 2 * Math.PI;	
+	while(a > Math.PI * 2)
+		a -= 2 * Math.PI;	
+	return a;
+}
+
+function line(a, b)
+{
+	return {a:a, b:b};
+}
+function triangle(a, b, c)
+{
+	return {a:a, b:b, c:c};
+}
+function point(x, y)
+{
+	return {x:x, y:y};
+}
+
+function GetAngleOfLine(l)
+{
+	var p = point(l.b.x-l.a.x, l.b.y-l.a.y);
+	return atan2(p.x, p.y);
+}
+
+window.onload = function draw()
+{
+	var c = document.getElementById("canvas");
+	var ctx = c.getContext("2d");
+	drawCenteredHexagon(ctx, 250, 250, 250);
+	var phi = 0;
+	var x = 250;
+	var y = 250;
+	var r = 5;
+	ctx.moveTo(250, 250);
+	for(var i = 0; i < 25; i++)
+	{
+		x += Math.cos(phi)*r;
+		y += Math.sin(phi)*r;
+		phi += (Math.random() -0.5)*2;
+		var p = point(x, y);
+		if(!IsInHexagon(p, 250, 250, 250))
+		{
+			break;
+		}
+		//ctx.lineTo(x, y);
+		drawCenteredHexagon(ctx, x, y, 250-(i+1)*r*2);
+	}
+	ctx.stroke(); 
+}
+
+	</script>
+	<style type="text/css">
+		canvas {
+		    padding: 0;
+		    margin: auto;
+		    display: block;
+		    width: 500px;
+		    height: 500px;
+		    position: absolute;
+		    top: 0;
+		    bottom: 0;
+		    left: 0;
+		    right: 0;
+		}
+	</style>
+</head>
+<body>
+	<canvas id="canvas" width="500px" height="500px" ></canvas>
+</body>
+</html>
