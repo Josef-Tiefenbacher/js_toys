@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebGPU Spinning Cube</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 0 80px rgba(80, 120, 255, 0.15),
+        0 0 160px rgba(80, 120, 255, 0.05);
+    }
+
+    #error {
+      display: none;
+      color: #ff6060;
+      background: rgba(255, 80, 80, 0.08);
+      border: 1px solid rgba(255, 80, 80, 0.3);
+      padding: 24px 32px;
+      max-width: 480px;
+      text-align: center;
+      line-height: 1.7;
+      font-size: 14px;
+      letter-spacing: 0.03em;
+    }
+
+    #error strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 10px;
+      color: #ff8080;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas" width="640" height="640"></canvas>
+  <div id="error">
+    <strong>WebGPU Not Available</strong>
+    WebGPU requires a modern browser with hardware acceleration enabled.<br><br>
+    Try Chrome 113+, Edge 113+, or Firefox Nightly with <code>dom.webgpu.enabled</code> set to <code>true</code>.
+  </div>
+
+  <script>
+  (async () => {
+    const canvas = document.getElementById('canvas');
+    const errorBox = document.getElementById('error');
+
+    // ── WebGPU bootstrap ──────────────────────────────────────────────────────
+
+    if (!navigator.gpu) {
+      canvas.style.display = 'none';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      canvas.style.display = 'none';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    const device = await adapter.requestDevice();
+    const ctx    = canvas.getContext('webgpu');
+    const fmt    = navigator.gpu.getPreferredCanvasFormat();
+
+    ctx.configure({ device, format: fmt, alphaMode: 'premultiplied' });
+
+    var camPos = [0, 0, 2.0];
+
+    var blue = [0.42, 0.73, 1.00,];
+    var arr = [];
+
+    function addLod(arr, limit, step, center)
+    {
+        for(var i = -limit; i < limit; i += step)
+            for(var j = -limit; j < limit; j +=step)
+            {
+                if(Math.abs(i)+step >=center || Math.abs(j)+step >=center)
+                {
+                    arr.push([i     ,j+step,0, 0,0,0, ...blue]);
+                    arr.push([i+step,j     ,0, 0,0,0, ...blue]);
+                    arr.push([i     ,j     ,0, 0,0,0, ...blue]);
+
+                    arr.push([i+step,j+step,0, 0,0,0, ...blue]);
+                    arr.push([i+step,j     ,0, 0,0,0, ...blue]);
+                    arr.push([i     ,j+step,0, 0,0,0, ...blue]);
+                }
+            }
+    }
+
+    addLod(arr, 3, 0.1, 0);
+    addLod(arr, 9, 0.2, 3);
+    addLod(arr, 81, 0.4, 9);
+
+    const cubeVerts = new Float32Array([...arr.flatMap(x => x)]);
+    //*/
+
+    const vertexBuffer = device.createBuffer({
+      size:  cubeVerts.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(vertexBuffer, 0, cubeVerts);
+
+    // ── Uniform buffer (64 bytes: 4×4 matrix) ────────────────────────────────
+
+    const uniformBuffer = device.createBuffer({
+      size:  64 + 16 + 3*16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // ── Shaders ───────────────────────────────────────────────────────────────
+
+    const shaderSrc = /* wgsl */ `
+      struct Uniforms 
+      { 
+        mvp : mat4x4<f32>, 
+        camPos: vec3<f32>,
+        camForward: vec3<f32>, 
+        camRight: vec3<f32>, 
+        camUp: vec3<f32>, 
+        };
+      @group(0) @binding(0) var<uniform> uni : Uniforms;
+
+      struct VertIn {
+        @location(0) pos    : vec3<f32>,
+        @location(1) normal : vec3<f32>,
+        @location(2) colour : vec3<f32>,
+      };
+
+      struct VertOut {
+        @builtin(position) clip : vec4<f32>,
+        @location(0)       col  : vec3<f32>,
+        @location(1)       pos  : vec3<f32>,
+      };
+
+      const waveCount = 4;
+      const waves = array<vec4<f32>, waveCount>(
+            vec4<f32>(  3.0, 4.0, 3.0, 1.0),
+            vec4<f32>( -1.0, 1.0, 1.9, 2.0),
+            vec4<f32>(  2.0, -1.0, 4.5, 1.0),
+            vec4<f32>( -1.0, 3.0, 1.2, 2.0),
+        );
+
+
+      fn wsin(p: vec2<f32>, w:vec4<f32>) -> f32
+      {
+        let waveDir = normalize(w.xy);
+        let waveScalar = w.z * dot(p, waveDir);
+        return w.w * sin(waveScalar);
+      }
+
+      fn waveh(p: vec2<f32>) -> f32
+      {
+          var sum = 0.0;
+          for (var i = 0; i < waveCount; i++) {
+            sum += wsin(p, waves[i]);
+          }
+          return sum;
+      }
+  
+      fn wcos(p: vec2<f32>, w:vec4<f32>) -> vec3<f32>
+      {
+        let waveDir = normalize(w.xy);
+        let waveScalar = w.z * dot(p, waveDir);
+        return normalize (vec3<f32>(w.w * cos(waveScalar) * waveDir, 1.0));
+      }
+
+
+      fn waven(p: vec2<f32>) -> vec3<f32>
+      {
+          var sum = vec3<f32>(0.0, 0.0, 0.0);
+          for (var i = 0; i < waveCount; i++) {
+            sum += wcos(p, waves[i]);
+          }
+          return sum/waveCount;
+      }
+  
+
+      @vertex
+      fn vs(v : VertIn) -> VertOut {
+        var o : VertOut;
+        var p = v.pos + uni.camPos;
+        let pA = waveh(p.xy);
+
+        o.clip = uni.mvp * vec4<f32>(p.x, p.y, pA/10.0, 1.0);
+        o.col  = v.colour;
+        o.pos = p;
+        return o;
+      }
+
+
+
+
+      @fragment
+      fn fs(i : VertOut) -> @location(0) vec4<f32> {
+        var p = i.pos;
+        var nrm = waven(p.xy);
+
+        // Simple directional light
+        let light = normalize(vec3<f32>(0.0, 1.0, 0.0));
+        let diff  = max(dot(nrm, light), 0.0);
+        let amb   = 0.31;
+        let lum   = amb + (1.0 - amb) * diff;
+        return vec4<f32>(i.col * lum, 1.0);
+      }
+
+      const positions = array<vec2<f32>, 6>(
+            vec2<f32>( 1.0,  1.0),
+            vec2<f32>( 1.0, -1.0),
+            vec2<f32>(-1.0, -1.0),
+            vec2<f32>( 1.0,  1.0),
+            vec2<f32>(-1.0, -1.0),
+            vec2<f32>(-1.0,  1.0)
+        );
+     struct SkyVertOut {
+        @builtin(position) clip : vec4<f32>,
+        @location(0)       dir  : vec3<f32>,
+      };
+
+      @vertex
+      fn sky_vs(@builtin(vertex_index) VertexIndex : u32) -> SkyVertOut {
+        var output : SkyVertOut;
+        output.clip = vec4<f32>(positions[VertexIndex], 1.0, 1.0);
+        var x: f32 = positions[VertexIndex].x;
+        var y: f32 = positions[VertexIndex].y;
+
+        output.dir = normalize(uni.camForward + x * uni.camRight + y * uni.camUp);
+        return output;
+      }
+
+      @fragment
+      fn sky_fs(i : SkyVertOut) -> @location(0) vec4<f32> {
+
+        return vec4<f32>(0.5 + 0.5*i.dir, 1.0);
+      }
+    `;
+
+    const shader = device.createShaderModule({ code: shaderSrc });
+
+    // ── Depth texture ─────────────────────────────────────────────────────────
+
+    const depthTex = device.createTexture({
+      size:   [canvas.width, canvas.height],
+      format: 'depth24plus',
+      usage:  GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    // ── Bind-group layout & pipeline ──────────────────────────────────────────
+
+    const bindGroupLayout = device.createBindGroupLayout({
+      entries: [{
+        binding:    0,
+        visibility: GPUShaderStage.VERTEX,
+        buffer:     { type: 'uniform' },
+      }],
+    });
+
+    const bindGroup = device.createBindGroup({
+      layout:  bindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+    });
+
+
+
+    const skyPipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      vertex: {
+        module:     shader,
+        entryPoint: 'sky_vs',
+      },
+      fragment: {
+        module:     shader,
+        entryPoint: 'sky_fs',
+        targets:    [{ format: fmt }],
+      },
+        primitive : {
+            topology : "triangle-list"
+        },
+      depthStencil: {
+        format:            'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare:      'less-equal',
+      },
+    });
+
+
+    const pipeline = device.createRenderPipeline({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+      vertex: {
+        module:     shader,
+        entryPoint: 'vs',
+        buffers: [{
+          arrayStride: 9 * 4,
+          attributes: [
+            { shaderLocation: 0, offset:  0, format: 'float32x3' }, // pos
+            { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal
+            { shaderLocation: 2, offset: 24, format: 'float32x3' }, // colour
+          ],
+        }],
+      },
+      fragment: {
+        module:     shader,
+        entryPoint: 'fs',
+        targets:    [{ format: fmt }],
+      },
+      primitive: {
+        topology:  'triangle-list',
+        cullMode:  'back',
+      },
+      depthStencil: {
+        format:            'depth24plus',
+        depthWriteEnabled: true,
+        depthCompare:      'less',
+      },
+    });
+
+    // ── Math helpers ──────────────────────────────────────────────────────────
+
+    const mat4 = {
+      identity: () => new Float32Array([
+        1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1,
+      ]),
+
+      multiply(a, b) {
+        const o = new Float32Array(16);
+        for (let i = 0; i < 4; i++)
+          for (let j = 0; j < 4; j++)
+            for (let k = 0; k < 4; k++)
+              o[j*4+i] += a[k*4+i] * b[j*4+k];
+        return o;
+      },
+
+      perspective(fovY, aspect, near, far) {
+        const f = 1 / Math.tan(fovY / 2);
+        const nf = 1 / (near - far);
+        return new Float32Array([
+          f/aspect, 0,  0,                     0,
+          0,        f,  0,                     0,
+          0,        0,  (far+near)*nf,         -1,
+          0,        0,  2*far*near*nf,          0,
+        ]);
+      },
+
+      rotationY(a) {
+        const c = Math.cos(a), s = Math.sin(a);
+        return new Float32Array([
+          1, 0,  0, 0,
+          0, c,  s, 0,
+          0,-s,  c, 0,
+          0, 0,  0, 1,
+        ]);
+      },
+
+      rotationX(a) {
+        const c = Math.cos(a), s = Math.sin(a);
+        return new Float32Array([
+          c,-s, 0, 0,
+          s, c, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1,
+        ]);
+      },
+
+      translation(x, y, z) {
+        return new Float32Array([
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          x, y, z, 1,
+        ]);
+      },
+    };
+
+
+
+var shaderAngle = 0;
+var shaderAngleY = Math.PI;
+
+  canvas.onpointerdown = (e) => {
+    canvas.onpointermove = mousemove;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.requestPointerLock();
+  }
+
+var pressedKeys = {};
+window.onkeyup = function(e) { pressedKeys[e.key] = false; }
+window.onkeydown = function(e) { pressedKeys[e.key] = true; }
+
+function mousemove(e) {
+  shaderAngle += (e.movementX)/500;
+  shaderAngleY += (e.movementY)/500;
+}
+
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+
+    let t = 0;
+
+    const proj = mat4.perspective(
+      Math.PI / 2,
+      canvas.width / canvas.height,
+      0.1,
+      100,
+    );
+
+    function length(vec)
+    {
+        var sum = 0.0
+        for (var i = vec.length - 1; i >= 0; i--) {
+            sum+=vec[i]*vec[i];
+        }
+        return Math.sqrt(sum);
+    }
+
+
+    function normalize(vec)
+    {
+        var l = length(vec);
+        return vec.map(a => a/l);
+    }
+
+    var oldt = 0;
+
+    function frame(ts) {
+      t = ts * 0.001;
+
+      var dt = 0;
+      if(oldt > 0)
+        dt= ts-oldt;
+
+      oldt = ts;
+      var rx = mat4.rotationX(shaderAngle);
+      var ry = mat4.rotationY(shaderAngleY);
+      var camRot = mat4.multiply(ry, rx);
+
+      var angle = shaderAngle+Math.PI;
+      var angleY = shaderAngleY+Math.PI;
+      var yCos = Math.cos(angleY);
+      var ySin = Math.sin(angleY);
+      var camForward = normalize( [ ySin*Math.sin(angle), -ySin*Math.cos(angle), -yCos]);
+      var camRight =   normalize( [      Math.cos(angle),       Math.sin(angle),  0.0 ]);
+      var camUp =      normalize( [-yCos*Math.sin(angle), yCos*Math.cos(angle), -ySin]);
+
+
+      var speed= dt * 0.001;
+      if(pressedKeys["w"])
+      {
+        camPos[0] += camForward[0] * speed;
+        camPos[1] += camForward[1] * speed;
+        camPos[2] += camForward[2] * speed;
+      }
+      if(pressedKeys["s"])
+      {
+        camPos[0] += -camForward[0] * speed;
+        camPos[1] += -camForward[1] * speed;
+        camPos[2] += -camForward[2] * speed;
+      }
+      if(pressedKeys["a"])
+      {
+        camPos[0] += camRight[0] * speed;
+        camPos[1] += camRight[1] * speed;
+        camPos[2] += camRight[2] * speed;
+      }
+      if(pressedKeys["d"])
+      {
+        camPos[0] += -camRight[0] * speed;
+        camPos[1] += -camRight[1] * speed;
+        camPos[2] += -camRight[2] * speed;
+      }
+      if(pressedKeys[" "])
+      {
+        camPos[0] += camUp[0] * speed;
+        camPos[1] += camUp[1] * speed;
+        camPos[2] += camUp[2] * speed;
+      }
+      if(pressedKeys["Control"])
+      {
+        camPos[0] += -camUp[0] * speed;
+        camPos[1] += -camUp[1] * speed;
+        camPos[2] += -camUp[2] * speed;
+      }
+      var trans = mat4.translation(-camPos[0],-camPos[1], camPos[2]);
+
+
+      var cam = mat4.multiply(camRot, trans)
+      const mvp   = mat4.multiply(proj, cam);
+
+      device.queue.writeBuffer(uniformBuffer, 0, mvp);
+      device.queue.writeBuffer(uniformBuffer, 64, new Float32Array(camPos));
+      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 0*16, new Float32Array(camForward));
+      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 1*16, new Float32Array(camRight));
+      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 2*16, new Float32Array(camUp));
+
+      const enc  = device.createCommandEncoder();
+
+      const pass = enc.beginRenderPass({
+        colorAttachments: [{
+          view:       ctx.getCurrentTexture().createView(),
+          clearValue: { r: 0.339, g: 0.339, b: 0.359, a: 1 },
+          loadOp:     'clear',
+          storeOp:    'store',
+        }],
+        depthStencilAttachment: {
+          view:            depthTex.createView(),
+          depthClearValue: 1.0,
+          depthLoadOp:     'clear',
+          depthStoreOp:    'store',
+
+            stencilLoadOp: "clear",
+            stencilStoreOp: "discard"
+        },
+      });
+
+
+      pass.setPipeline(skyPipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(6, 1, 0, 0);
+
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.setVertexBuffer(0, vertexBuffer);
+      pass.draw(arr.length);
+      pass.end();
+
+      device.queue.submit([enc.finish()]);
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  })();
+  </script>
+</body>
+</html>

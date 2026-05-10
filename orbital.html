@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+
+var oldTimestamp;
+var h = 600;
+var w = 800;
+var center = [w/2, h/2];
+var objs = [];
+
+function paint(ctx, timestamp){
+	ctx.fillStyle = "#EEEEEE";
+	ctx.fillRect(0, 0, w, h);
+
+	
+	if(oldTimestamp != undefined)
+		var dt = timestamp-oldTimestamp;
+		
+	for (var obj of objs) 
+	{
+		moveObj(obj, dt);
+		drawCircle(ctx, obj.pos, 5, "#222222");
+	}
+
+	drawCircle(ctx, center, 10, "#228822");
+
+	oldTimestamp = timestamp;
+}
+
+function moveObj(obj, dt)
+{
+	if(dt > 30) dt = 30;
+	// from video
+	// v = v + a * dt;
+	// x = x + v * dt;
+	var dist = distance(obj.pos, center);
+	var gravConst = 1;
+	var distCubed = dist*dist*dist;
+
+	for(var i = 0; i < obj.pos.length ; i++)
+	{
+		var a = -gravConst * (obj.pos[i] - center[i]) / distCubed;
+		obj.v[i] = obj.v[i] + (a * dt);
+		obj.pos[i] = obj.pos[i] + (obj.v[i] * dt);
+	}
+}
+
+function drawCircle(ctx, pos, rad, color)
+{
+	ctx.fillStyle = color;	
+	ctx.beginPath();
+    ctx.arc(pos[0], pos[1], rad, 0, 2 * Math.PI);
+    ctx.fill();
+}
+
+function onClick(x, y)
+{
+	objs.push(createObj(x, y));
+}
+
+function createObj(x, y)
+{
+	var pos = [x, y];
+	var dist = distance(pos, center);
+	var gravConst = 1;
+	var ddist = Math.pow(dist, 1.50 );
+
+	if(Math.random() > 0.5)
+		gravConst *= -1;
+
+	return {
+	pos : pos,
+	v :  [-gravConst*(y-center[1]) / ddist, gravConst*(x - center[0]) / ddist],
+	};
+}
+
+function distance(a, b)
+{
+	var sum = 0;
+	for(var i = 0; i < a.length ; i++)
+		sum += (a[i]-b[i])*(a[i]-b[i]);
+	return Math.sqrt(sum);
+}
+
+function handleClick (canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    onClick(x, y);
+}
+
+function start(){
+	const canvas = document.getElementById('c');
+	const div = document.getElementById('div');
+
+	canvas.addEventListener('mousedown', function(e) {
+    	handleClick(canvas, e)
+	})
+	var ctx = canvas.getContext("2d");
+
+	const render = (timestamp) => {
+	  paint(ctx, timestamp);
+	  window.requestAnimationFrame(render);
+	};
+	window.requestAnimationFrame(render);
+}
+	window.onload = start;
+</script>
+</head>
+<body background="black">
+	<canvas id = 'c' width="800" height="600" onload="start"></canvas>
+	<div id ='div'> </div>
+</body>
+</html>
