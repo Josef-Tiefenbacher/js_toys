@@ -453,7 +453,7 @@ function mousemove(e) {
       var yCos = Math.cos(angleY);
       var ySin = Math.sin(angleY);
       var camForward = normalize( [ ySin*Math.sin(angle), -ySin*Math.cos(angle), -yCos]);
-      var camRight =   normalize( [      Math.cos(angle),       Math.sin(angle),  0.0 ]);
+      var camRight =   normalize( [-Math.cos(angle),-Math.sin(angle), 0.0]);
       var camUp =      normalize( [-yCos*Math.sin(angle), yCos*Math.cos(angle), -ySin]);
 
 
@@ -470,13 +470,13 @@ function mousemove(e) {
         camPos[1] += -camForward[1] * speed;
         camPos[2] += -camForward[2] * speed;
       }
-      if(pressedKeys["a"])
+      if(pressedKeys["d"])
       {
         camPos[0] += camRight[0] * speed;
         camPos[1] += camRight[1] * speed;
         camPos[2] += camRight[2] * speed;
       }
-      if(pressedKeys["d"])
+      if(pressedKeys["a"])
       {
         camPos[0] += -camRight[0] * speed;
         camPos[1] += -camRight[1] * speed;
