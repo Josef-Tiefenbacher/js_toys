@@ -10,32 +10,27 @@
 
 .while 
 { 
-    background-color: #DDDDFF;
+    background-color: #CCCCFF;
 }
 .for 
 { 
-    background-color: #DDDDFF;
+    background-color: #CCCCFF;
 }
 .if 
 { 
-    background-color: #FFFFDD;
+    background-color: #FFFFCC;
 }
 .then 
 { 
-    background-color: #DDFFDD;
+    background-color: #CCFFCC;
 }
 .else
 { 
-    background-color: #FFDDDD;
+    background-color: #FFCCCC;
 }
 .statement
 { 
-    background-color: #DDDDDD;
-}
-
-.statement
-{ 
-    background-color: #DDDDDD;
+    background-color: #CCCCCC;
 }
 
 .selected
@@ -70,7 +65,7 @@ function clickEvent(e)
 
 function getClass(type)
 {
-	if(type == "assign")
+	if(type == "assign" || type == "define")
 		return "statement";
 	return type;
 }
@@ -90,7 +85,9 @@ var selected;
 <input type="button" onclick="add('while')"  value="while" ></input>
 <input type="button" onclick="add('for')" value="for" ></input>
 <input type="button" onclick="add('if')" value="if" ></input>
-<input type="button" onclick="add('assign')" value="assign" ></input><br>
+<input type="button" onclick="add('assign')" value="assign" ></input>
+<input type="button" onclick="add('define')" value="define" ></input>
+<br>
 <div id="root" >
 </div>
 <script type="text/javascript">
