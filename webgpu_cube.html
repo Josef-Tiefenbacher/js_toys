@@ -53,7 +53,7 @@
     WebGPU requires a modern browser with hardware acceleration enabled.<br><br>
     Try Chrome 113+, Edge 113+, or Firefox Nightly with <code>dom.webgpu.enabled</code> set to <code>true</code>.
   </div>
-
+<p id="text"></p>
   <script>
   (async () => {
     const canvas = document.getElementById('canvas');
@@ -79,11 +79,33 @@
     const fmt    = navigator.gpu.getPreferredCanvasFormat();
 
     ctx.configure({ device, format: fmt, alphaMode: 'premultiplied' });
-
     var camPos = [0, 0, 2.0];
 
     var blue = [0.42, 0.73, 1.00,];
     var arr = [];
+
+
+    function wave(direction, phase, wavelength, amplitude, t)
+    {
+    return (t) => [direction, phase+ t*Math.sqrt(wavelength), wavelength, amplitude];
+    }
+
+    var scaleW=0.1;
+    var scaleA=1.0;
+    var scaleAA=0.3;
+
+    let waves=[
+        wave( 4.0, 2.0, 3.0, scaleAA*1.0 ),
+        wave( 4.3, 1.2, 1.9, scaleAA*0.6 ),
+        wave( 4.0, 0.8, 0.2, scaleAA*0.1 ),
+        wave( 4.2, 2.2, 0.9, scaleAA*0.4 ),
+
+        wave( 4.0, 2.0, scaleW*3.0, scaleA*1.0 ),
+        wave( 4.3, 1.2, scaleW*1.9, scaleA*0.6 ),
+        wave( 4.0, 0.8, scaleW*0.2, scaleA*0.1 ),
+        wave( 4.2, 2.2, scaleW*0.9, scaleA*0.4 ),
+    ];
+
 
     function addLod(arr, limit, step, center)
     {
@@ -127,7 +149,7 @@
     // ── Shaders ───────────────────────────────────────────────────────────────
 
     const shaderSrc = /* wgsl */ `
-      const waveCount = 4;
+      const waveCount = ${waves.length};
 
       struct Uniforms 
       { 
@@ -152,6 +174,9 @@
         @builtin(position) clip : vec4<f32>,
         @location(0)       col  : vec3<f32>,
         @location(1)       pos  : vec3<f32>,
+        @location(2)       nrm  : vec3<f32>,
+        @location(3)       screenpos  : vec2<f32>,
+
       };
 
       fn wsin(p: vec2<f32>, w:vec4<f32>) -> f32
@@ -192,27 +217,40 @@
         var p = v.pos + uni.camPos;
         let pA = waveh(p.xy);
 
-        o.clip = uni.mvp * vec4<f32>(p.x, p.y, pA/10.0, 1.0);
+        var clip = uni.mvp * vec4<f32>(p.x, p.y, pA/10.0, 1.0);
+        o.clip = clip;
         o.col  = v.colour;
         o.pos = p;
+        o.nrm = waven(p.xy);
+        o.screenpos = clip.xy / clip.w;
         return o;
       }
-
-
-
 
       @fragment
       fn fs(i : VertOut) -> @location(0) vec4<f32> {
         var p = i.pos;
-        var nrm = waven(p.xy);
+        var nrm = i.nrm;//waven(p.xy);
 
         // Simple directional light
-        let light = normalize(vec3<f32>(0.0, 1.0, 0.0));
+        let light = normalize(vec3<f32>(1.0, 1.0, 1.0));
         let diff  = max(dot(nrm, light), 0.0);
         let amb   = 0.31;
         let lum   = amb + (1.0 - amb) * diff;
-        return vec4<f32>(i.col * lum, 1.0);
+
+
+        var dev = 0.5*(i.screenpos.x * uni.camRight) + (i.screenpos.y * uni.camUp);
+        var camdir = normalize(uni.camForward + dev);
+        var r = camdir - (2.0 * dot(camdir, nrm) * nrm);
+        var reflectionColor = dir_to_sky(r);
+        return vec4<f32>((i.col+reflectionColor.xyz)*0.5 * lum , 1.0);
       }
+
+
+
+
+
+
+
 
       const positions = array<vec2<f32>, 6>(
             vec2<f32>( 1.0,  1.0),
@@ -225,23 +263,44 @@
      struct SkyVertOut {
         @builtin(position) clip : vec4<f32>,
         @location(0)       dir  : vec3<f32>,
+        @location(1)       screenpos  : vec2<f32>,
       };
 
       @vertex
       fn sky_vs(@builtin(vertex_index) VertexIndex : u32) -> SkyVertOut {
         var output : SkyVertOut;
         output.clip = vec4<f32>(positions[VertexIndex], 1.0, 1.0);
-        var x: f32 = positions[VertexIndex].x;
-        var y: f32 = positions[VertexIndex].y;
-
-        output.dir = normalize(uni.camForward + x * uni.camRight + y * uni.camUp);
+        let vert = positions[VertexIndex];
+        var dev = 0.5*(vert.x * normalize(uni.camRight)) + (vert.y * normalize(uni.camUp));
+        output.dir = normalize(uni.camForward + dev);
+        output.screenpos = vert;
         return output;
+      }
+
+      fn dir_to_sky(dir: vec3<f32>) -> vec4<f32>
+      {
+        return vec4<f32>(0.5 + 0.5*dir, 1.0);
+      }
+
+      fn dir_to_sky_moon(dir: vec3<f32>) -> vec4<f32>
+      {
+        let light = normalize(vec3<f32>(1.0, 1.0, 0.0));
+        var diff  = max(dot(dir, light), 0.0);
+        diff = diff*diff*diff;
+        if(diff < 0.99)
+        {
+            diff= 0.0;
+        }
+        return vec4<f32>(diff,diff,diff, 1.0);
       }
 
       @fragment
       fn sky_fs(i : SkyVertOut) -> @location(0) vec4<f32> {
 
-        return vec4<f32>(0.5 + 0.5*i.dir, 1.0);
+        var dev = 0.5*(i.screenpos.x * uni.camRight) + (i.screenpos.y * uni.camUp);
+        var dir = normalize(uni.camForward + dev);
+
+        return dir_to_sky(dir);
       }
     `;
 
@@ -399,6 +458,10 @@ window.onkeydown = function(e) { pressedKeys[e.key] = true; }
 function mousemove(e) {
   shaderAngle += (e.movementX)/500;
   shaderAngleY += (e.movementY)/500;
+  if(shaderAngleY > Math.PI)
+    shaderAngleY =Math.PI;
+  if(shaderAngleY < 0)
+    shaderAngleY = 0;
 }
 
 
@@ -489,35 +552,24 @@ function mousemove(e) {
         camPos[1] += -camUp[1] * speed;
         camPos[2] += -camUp[2] * speed;
       }
+
       var trans = mat4.translation(-camPos[0],-camPos[1], camPos[2]);
 
 
       var cam = mat4.multiply(camRot, trans)
       const mvp   = mat4.multiply(proj, cam);
 
+
+
       device.queue.writeBuffer(uniformBuffer, 0, mvp);
       device.queue.writeBuffer(uniformBuffer, 64 + 0*16, new Float32Array(camPos));
       device.queue.writeBuffer(uniformBuffer, 64 + 1*16, new Float32Array(camForward));
       device.queue.writeBuffer(uniformBuffer, 64 + 2*16, new Float32Array(camRight));
       device.queue.writeBuffer(uniformBuffer, 64 + 3*16, new Float32Array(camUp));
-      
-      function wave(direction, phase, wavelength, amplitude, t)
-      {
-        return [direction, phase+ t*Math.sqrt(wavelength), wavelength, amplitude];
-      }
-
-      let waves=[
-            wave( 4.0, 2.0, 3.0, 3.0, t ),
-            wave( 4.3, 1.2, 1.9, 2.0, t ),
-            wave( 4.0, 0.8, 0.2, 0.4, t ),
-            wave( 4.2, 2.2, 0.9, 1.3, t ),
-      ];
-
-      let baseIndex = 64 + 4*16;
+      var waveValues = [];
       for(let i = 0; i < waves.length; i++)
-      {
-        device.queue.writeBuffer(uniformBuffer, baseIndex + i*16, new Float32Array(waves[i]));
-      }
+        waveValues=waveValues.concat(waves[i](t));
+      device.queue.writeBuffer(uniformBuffer, 64 + 4*16, new Float32Array(waveValues));
 
       const enc  = device.createCommandEncoder();
 
@@ -534,8 +586,8 @@ function mousemove(e) {
           depthLoadOp:     'clear',
           depthStoreOp:    'store',
 
-            stencilLoadOp: "clear",
-            stencilStoreOp: "discard"
+            //stencilLoadOp: "clear",
+            //stencilStoreOp: "discard"
         },
       });
 
