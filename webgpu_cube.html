@@ -87,6 +87,7 @@
 
     function addLod(arr, limit, step, center)
     {
+        step = step*0.5;
         for(var i = -limit; i < limit; i += step)
             for(var j = -limit; j < limit; j +=step)
             {
@@ -119,20 +120,25 @@
     // ── Uniform buffer (64 bytes: 4×4 matrix) ────────────────────────────────
 
     const uniformBuffer = device.createBuffer({
-      size:  64 + 16 + 3*16,
+      size:  64 + 4*16 + 4*16*4,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
     // ── Shaders ───────────────────────────────────────────────────────────────
 
     const shaderSrc = /* wgsl */ `
+      const waveCount = 4;
+
       struct Uniforms 
       { 
         mvp : mat4x4<f32>, 
+
         camPos: vec3<f32>,
         camForward: vec3<f32>, 
         camRight: vec3<f32>, 
         camUp: vec3<f32>, 
+
+        waves: array<vec4<f32>, waveCount>
         };
       @group(0) @binding(0) var<uniform> uni : Uniforms;
 
@@ -148,48 +154,37 @@
         @location(1)       pos  : vec3<f32>,
       };
 
-      const waveCount = 4;
-      const waves = array<vec4<f32>, waveCount>(
-            vec4<f32>(  3.0, 4.0, 3.0, 1.0),
-            vec4<f32>( -1.0, 1.0, 1.9, 2.0),
-            vec4<f32>(  2.0, -1.0, 4.5, 1.0),
-            vec4<f32>( -1.0, 3.0, 1.2, 2.0),
-        );
-
-
       fn wsin(p: vec2<f32>, w:vec4<f32>) -> f32
       {
-        let waveDir = normalize(w.xy);
-        let waveScalar = w.z * dot(p, waveDir);
+        let waveDir = vec2<f32>(sin(w.x), cos(w.x));
+        let waveScalar = w.y + (w.z * dot(p, waveDir));
         return w.w * sin(waveScalar);
       }
 
       fn waveh(p: vec2<f32>) -> f32
       {
-          var sum = 0.0;
-          for (var i = 0; i < waveCount; i++) {
-            sum += wsin(p, waves[i]);
-          }
-          return sum;
+        var sum = 0.0;
+        for (var i = 0; i < waveCount; i++) {
+            sum += wsin(p, uni.waves[i]);
+        }
+        return sum;
       }
   
       fn wcos(p: vec2<f32>, w:vec4<f32>) -> vec3<f32>
       {
-        let waveDir = normalize(w.xy);
-        let waveScalar = w.z * dot(p, waveDir);
+        let waveDir = vec2<f32>(sin(w.x), cos(w.x));
+        let waveScalar = w.y + (w.z * dot(p, waveDir));
         return normalize (vec3<f32>(w.w * cos(waveScalar) * waveDir, 1.0));
       }
 
-
       fn waven(p: vec2<f32>) -> vec3<f32>
       {
-          var sum = vec3<f32>(0.0, 0.0, 0.0);
-          for (var i = 0; i < waveCount; i++) {
-            sum += wcos(p, waves[i]);
-          }
-          return sum/waveCount;
+        var sum = vec3<f32>(0.0, 0.0, 0.0);
+        for (var i = 0; i < waveCount; i++) {
+            sum += wcos(p, uni.waves[i]);
+        }
+        return sum/waveCount;
       }
-  
 
       @vertex
       fn vs(v : VertIn) -> VertOut {
@@ -265,7 +260,7 @@
     const bindGroupLayout = device.createBindGroupLayout({
       entries: [{
         binding:    0,
-        visibility: GPUShaderStage.VERTEX,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
         buffer:     { type: 'uniform' },
       }],
     });
@@ -501,10 +496,28 @@ function mousemove(e) {
       const mvp   = mat4.multiply(proj, cam);
 
       device.queue.writeBuffer(uniformBuffer, 0, mvp);
-      device.queue.writeBuffer(uniformBuffer, 64, new Float32Array(camPos));
-      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 0*16, new Float32Array(camForward));
-      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 1*16, new Float32Array(camRight));
-      device.queue.writeBuffer(uniformBuffer, 64 + 16 + 2*16, new Float32Array(camUp));
+      device.queue.writeBuffer(uniformBuffer, 64 + 0*16, new Float32Array(camPos));
+      device.queue.writeBuffer(uniformBuffer, 64 + 1*16, new Float32Array(camForward));
+      device.queue.writeBuffer(uniformBuffer, 64 + 2*16, new Float32Array(camRight));
+      device.queue.writeBuffer(uniformBuffer, 64 + 3*16, new Float32Array(camUp));
+      
+      function wave(direction, phase, wavelength, amplitude, t)
+      {
+        return [direction, phase+ t*Math.sqrt(wavelength), wavelength, amplitude];
+      }
+
+      let waves=[
+            wave( 4.0, 2.0, 3.0, 3.0, t ),
+            wave( 4.3, 1.2, 1.9, 2.0, t ),
+            wave( 4.0, 0.8, 0.2, 0.4, t ),
+            wave( 4.2, 2.2, 0.9, 1.3, t ),
+      ];
+
+      let baseIndex = 64 + 4*16;
+      for(let i = 0; i < waves.length; i++)
+      {
+        device.queue.writeBuffer(uniformBuffer, baseIndex + i*16, new Float32Array(waves[i]));
+      }
 
       const enc  = device.createCommandEncoder();
 
